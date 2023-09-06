@@ -13,7 +13,7 @@
  * Text Domain:       rocket
  * Domain Path:       /languages
  */
-class Rocket_WPMediaAssignement {
+class RocketWPMediaAssignement {
 
 	/**
 	 * Class constructor that initializes actions.
@@ -43,8 +43,9 @@ class Rocket_WPMediaAssignement {
 		// Nonce field.
 		$nonce_field = wp_nonce_field( 'crawl_action', 'crawl_nonce', true, false );
 
-		echo '<h2>Website Crawler</h2>';
-		echo '<form method="post">' . $nonce_field . '<input type="submit" name="crawl" value="Start Crawl"></form>';
+		echo '<h2>' . esc_html__( 'Website Crawler', 'rocket' ) . '</h2>';
+		// phpcs:ignore
+		echo '<form method="post">' . $nonce_field . '<input type="submit" name="crawl" value="' . esc_attr__( 'Start Crawl', 'rocket' ) . '"></form>';
 
 		// Verify the nonce before proceeding.
 		if ( isset( $_POST['crawl'] ) && check_admin_referer( 'crawl_action', 'crawl_nonce' ) ) {
@@ -59,9 +60,10 @@ class Rocket_WPMediaAssignement {
 
 		// Display the links.
 		foreach ( $links as $link ) {
-			echo $link . '<br>';
+			echo esc_url( $link ) . '<br>';
 		}
 	}
+
 
 	/**
 	 * Executes the website crawl and saves the links.
@@ -97,10 +99,16 @@ class Rocket_WPMediaAssignement {
 		$sitemap_content .= '</ul>';
 
 		// Write to sitemap.html.
-		$wp_filesystem->put_contents( 'sitemap.html', $sitemap_content );
+		$sitemap_path = ABSPATH . 'sitemap.html';
+		$wp_filesystem->put_contents( $sitemap_path, $sitemap_content );
 
-		// Create homepage.html.
-		$homepage_content = file_get_contents( $homepage );
+		$response = wp_remote_get( $homepage );
+
+		if ( is_wp_error( $response ) ) {
+			return;
+		}
+
+		$homepage_content = wp_remote_retrieve_body( $response );
 		$homepage_path    = ABSPATH . 'homepage.html';
 
 		// Write to homepage.html.
@@ -108,23 +116,39 @@ class Rocket_WPMediaAssignement {
 	}
 
 
-		/**
-		 * Crawl the given URL and return internal links.
-		 *
-		 * @param string $url The URL to crawl.
-		 * @return array $internal_links An array of internal links.
-		 */
+	/**
+	 * Crawl the given URL and return internal links.
+	 *
+	 * @param string $url The URL to crawl.
+	 * @return array $internal_links An array of internal links.
+	 */
 	public function crawl_page( $url ) {
 		$internal_links = [];
 
-		$ch = curl_init();
-		curl_setopt( $ch, CURLOPT_URL, $url );
-		curl_setopt( $ch, CURLOPT_RETURNTRANSFER, 1 );
-		$output = curl_exec( $ch );
-		curl_close( $ch );
+		// Fetch page content.
+		$response = wp_remote_get( $url );
+
+		if ( is_wp_error( $response ) ) {
+			return [];
+		}
+
+		$page_content = wp_remote_retrieve_body( $response );
 
 		$dom = new DOMDocument();
-		@$dom->loadHTML( $output );
+
+		// Suppress warnings only during loadHTML but capture them for logging.
+		libxml_use_internal_errors( true );
+		$loaded = $dom->loadHTML( $page_content );
+		libxml_clear_errors();
+
+		// To avoid displaying errors in production.
+		if ( ! $loaded ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore
+				error_log( 'DOMDocument could not parse the HTML content from: ' . $url );
+			}
+			return [];
+		}
 
 		$tags = $dom->getElementsByTagName( 'a' );
 		foreach ( $tags as $tag ) {
@@ -139,4 +163,4 @@ class Rocket_WPMediaAssignement {
 	}
 }
 
-$rocket_wp_media_assignement = new Rocket_WPMediaAssignement();
+$rocket_wp_media_assignement = new RocketWPMediaAssignement();
