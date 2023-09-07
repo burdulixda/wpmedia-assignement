@@ -24,6 +24,7 @@ class RocketWPMediaAssignement {
 		add_action( 'admin_menu', [ $this, 'crawler_menu' ] );
 		add_action( 'run_crawl_hook', [ $this, 'run_crawl' ] );
 		add_action( 'admin_notices', [ $this, 'display_admin_notices' ] );
+		add_action( 'init', [ $this, 'schedule_cron_if_not_exists' ] );
 	}
 
 	/**
@@ -59,6 +60,17 @@ class RocketWPMediaAssignement {
 	}
 
 	/**
+	 * Schedule the cron event if it doesn't already exist.
+	 *
+	 * @return void
+	 */
+	public function schedule_cron_if_not_exists() {
+		if ( ! wp_next_scheduled( 'run_crawl_hook' ) ) {
+			wp_schedule_event( time(), 'hourly', 'run_crawl_hook' );
+		}
+	}
+
+	/**
 	 * Registers the crawler menu in the WordPress admin.
 	 *
 	 * @return void
@@ -84,6 +96,14 @@ class RocketWPMediaAssignement {
 		// Verify the nonce before proceeding.
 		if ( isset( $_POST['crawl'] ) && check_admin_referer( 'crawl_action', 'crawl_nonce' ) ) {
 			$this->run_crawl();
+
+			// Unschedule existing cron jobs.
+			$timestamp = wp_next_scheduled( 'run_crawl_hook' );
+			if ( $timestamp ) {
+				wp_unschedule_event( $timestamp, 'run_crawl_hook' );
+			}
+
+			// Schedule a new cron job.
 			if ( ! wp_next_scheduled( 'run_crawl_hook' ) ) {
 				wp_schedule_event( time(), 'hourly', 'run_crawl_hook' );
 			}
