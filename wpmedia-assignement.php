@@ -144,7 +144,7 @@ class RocketWPMediaAssignement {
 		$response = wp_remote_get( $homepage );
 
 		if ( is_wp_error( $response ) ) {
-			custom_log( $response->get_error_message() );
+			$this->custom_log( $response->get_error_message() );
 
 			update_option( 'crawler_error', 'Failed to fetch the homepage' );
 			return;
@@ -185,7 +185,7 @@ class RocketWPMediaAssignement {
 
 		if ( ! $loaded ) {
 			foreach ( $errors as $error ) {
-				custom_log( 'DOMDocument parsing error: ' . $error->message );
+				$this->custom_log( 'DOMDocument parsing error: ' . $error->message );
 			}
 
 			// Save the error message to display later.
