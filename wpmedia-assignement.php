@@ -25,6 +25,7 @@ class RocketWPMediaAssignement {
 		add_action( 'run_crawl_hook', [ $this, 'run_crawl' ] );
 		add_action( 'admin_notices', [ $this, 'display_admin_notices' ] );
 		add_action( 'init', [ $this, 'schedule_cron_if_not_exists' ] );
+		add_shortcode( 'display_sitemap', [ $this, 'display_sitemap_shortcode' ] );
 	}
 
 	/**
@@ -114,7 +115,23 @@ class RocketWPMediaAssignement {
 
 		// Display the links.
 		foreach ( $links as $link ) {
-			echo esc_url( $link ) . '<br>';
+			echo '<a href="' . esc_url( $link ) . '">' . esc_html( $link ) . '</a><br>';
+		}
+	}
+
+	/**
+	 * Get proper web root location for Bedrock and traditional WordPress environments.
+	 *
+	 * @return string A path to web root.
+	 */
+	private function get_web_root() {
+		// Determine if it's a Bedrock environment.
+		if ( defined( 'WP_ENV' ) ) {
+			// Bedrock setup.
+			return dirname( ABSPATH );
+		} else {
+			// Traditional WordPress setup.
+			return ABSPATH;
 		}
 	}
 
@@ -153,12 +170,15 @@ class RocketWPMediaAssignement {
 
 		$sitemap_content = '<ul>';
 		foreach ( $hyperlinks as $link ) {
-			$sitemap_content .= '<li>' . $link . '</li>';
+			$sitemap_content .= '<li><a href="' . esc_url( $link ) . '">' . esc_html( $link ) . '</a></li>';
 		}
 		$sitemap_content .= '</ul>';
 
+		// Get proper web root.
+		$web_root = $this->get_web_root();
+
 		// Write to sitemap.html.
-		$sitemap_path = ABSPATH . 'sitemap.html';
+		$sitemap_path = trailingslashit( $web_root ) . 'sitemap.html';
 		$wp_filesystem->put_contents( $sitemap_path, $sitemap_content );
 
 		$response = wp_remote_get( $homepage );
@@ -171,7 +191,7 @@ class RocketWPMediaAssignement {
 		}
 
 		$homepage_content = wp_remote_retrieve_body( $response );
-		$homepage_path    = ABSPATH . 'homepage.html';
+		$homepage_path    = trailingslashit( $web_root ) . 'homepage.html';
 
 		// Write to homepage.html.
 		$wp_filesystem->put_contents( $homepage_path, $homepage_content );
@@ -224,6 +244,36 @@ class RocketWPMediaAssignement {
 
 		return $internal_links;
 	}
+
+	/**
+	 * Display the link to the sitemap.html file via [dispaly_shortcode] shortcode on the front-end.
+	 *
+	 * @param array $atts $An associative array of attributes.
+	 * @return string A link to the sitemap.html file if it exists, otherwise a not available message.
+	 */
+	public function display_sitemap_shortcode( $atts ) {
+		global $wp_filesystem;
+
+		// Initialize the WP filesystem.
+		if ( empty( $wp_filesystem ) ) {
+			require_once ABSPATH . '/wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+
+		// Get proper web root.
+		$web_root = $this->get_web_root();
+
+		// Choose the correct path for sitemap.html.
+		$sitemap_path = trailingslashit( $web_root ) . 'sitemap.html';
+
+		if ( $wp_filesystem->exists( $sitemap_path ) ) {
+			$sitemap_url = home_url( 'sitemap.html' );
+			return '<a href="' . esc_url( $sitemap_url ) . '">View Sitemap</a>';
+		} else {
+			return 'Sitemap not available.';
+		}
+	}
+
 }
 
 $rocket_wp_media_assignement = new RocketWPMediaAssignement();
