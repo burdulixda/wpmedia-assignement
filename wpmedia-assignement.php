@@ -23,6 +23,39 @@ class RocketWPMediaAssignement {
 	public function __construct() {
 		add_action( 'admin_menu', [ $this, 'crawler_menu' ] );
 		add_action( 'run_crawl_hook', [ $this, 'run_crawl' ] );
+		add_action( 'admin_notices', [ $this, 'display_admin_notices' ] );
+	}
+
+	/**
+	 * Custom logic for logging errors in non-production environments.
+	 *
+	 * @param  mixed $message Error message.
+	 * @return void
+	 */
+	public function custom_log( $message ) {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// Ignoring PHPCS because we're only displaying errors if explicitly required by WP_DEBUG constant.
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( $message );
+		}
+	}
+
+
+	/**
+	 * Display_admin_notices.
+	 *
+	 * @return void
+	 */
+	public function display_admin_notices() {
+		$error = get_option( 'crawler_error' );
+		if ( ! empty( $error ) ) {
+			echo '<div class="notice notice-error is-dismissible">';
+			echo '<p>' . esc_html( $error ) . '</p>';
+			echo '</div>';
+
+			// Clear the error once displayed.
+			delete_option( 'crawler_error' );
+		}
 	}
 
 	/**
@@ -44,6 +77,7 @@ class RocketWPMediaAssignement {
 		$nonce_field = wp_nonce_field( 'crawl_action', 'crawl_nonce', true, false );
 
 		echo '<h2>' . esc_html__( 'Website Crawler', 'rocket' ) . '</h2>';
+		// Ignoring PHPCS because nonces are escaped by default.
 		// phpcs:ignore
 		echo '<form method="post">' . $nonce_field . '<input type="submit" name="crawl" value="' . esc_attr__( 'Start Crawl', 'rocket' ) . '"></form>';
 
@@ -79,6 +113,11 @@ class RocketWPMediaAssignement {
 			WP_Filesystem();
 		}
 
+		if ( ! WP_Filesystem() ) {
+			update_option( 'crawler_error', 'Failed to initialize WP Filesystem' );
+			return;
+		}
+
 		delete_option( 'crawler_links' );
 
 		// Remove existing sitemap.html if it exists.
@@ -105,6 +144,9 @@ class RocketWPMediaAssignement {
 		$response = wp_remote_get( $homepage );
 
 		if ( is_wp_error( $response ) ) {
+			custom_log( $response->get_error_message() );
+
+			update_option( 'crawler_error', 'Failed to fetch the homepage' );
 			return;
 		}
 
@@ -141,13 +183,14 @@ class RocketWPMediaAssignement {
 		$loaded = $dom->loadHTML( $page_content );
 		libxml_clear_errors();
 
-		// To avoid displaying errors in production.
 		if ( ! $loaded ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				// phpcs:ignore
-				error_log( 'DOMDocument could not parse the HTML content from: ' . $url );
+			foreach ( $errors as $error ) {
+				custom_log( 'DOMDocument parsing error: ' . $error->message );
 			}
-			return [];
+
+			// Save the error message to display later.
+			update_option( 'crawler_error', 'Failed to parse the homepage content' );
+			return;
 		}
 
 		$tags = $dom->getElementsByTagName( 'a' );
